@@ -16,9 +16,9 @@ def call_openai_for_review(file_content):
         "Given an input, create a comment on the changes if needed.\n"
         "If need to provide an example give only one.\n"
         "Remember NOT include backticks ```code ``` before and after the diff.\n"
-        "Print the diff of the file too.\n"
+        "Print the diff of the file too. Some files have no diff, so print only the line with the comment.\n"
         "Place your comments after the corresponding line and if there are many place it one after the other.\n"
-        "Your code review should look similar to this:\n"
+        "Your code review should look similar to this if the first line starts with 'diff --git':\n"
         """diff --git a/FILENAME b/FILENAME
            index some hashes and the permissions
            Some lines of code from the diff.
@@ -30,6 +30,12 @@ def call_openai_for_review(file_content):
            Comment#3: This is the third comment if needed.
             
            Some other lines of code from the diff"""
+        "Otherwise your code review should look similar to this:\n"
+        """some line of code that should be changed
+           Comment#1: This is the first comment
+           Comment#2: This is the second comment if needed.
+        """
+        "Remember NOT include backticks ```code ``` before and after the file content.\n"
         "The comments have to start with 'Comment#' and the number of the comment.\n"
         "Do not repeat comments in the suggestion section.\n"
         "The suggestion should start with 'Suggestion#' and this is where you should put the general suggestion about the code.\n"
@@ -49,6 +55,12 @@ def review_code(repo_path, extra_files=None):
     Review code in the specified repository path and any extra files.
     """
     files_to_review = []
+    color_map = {
+        '+': Fore.GREEN,
+        '-': Fore.RED,
+        'Comment#': Fore.YELLOW,
+        'Suggestion#': Fore.LIGHTCYAN_EX
+    }
 
     result = subprocess.run(
         ['git', '-C', repo_path, 'diff', '--name-only', 'HEAD'],
@@ -66,20 +78,10 @@ def review_code(repo_path, extra_files=None):
             )
             files_to_review.append((file, diff_result.stdout))
 
-    if extra_files:
-        files_to_review.extend(extra_files)
-
     for file_path, file_diff in files_to_review:
         print(f"Reviewing changes in {file_path}:")
 
         review_comments = call_openai_for_review(file_diff).splitlines()
-
-        color_map = {
-            '+': Fore.GREEN,
-            '-': Fore.RED,
-            'Comment#': Fore.YELLOW,
-            'Suggestion#': Fore.LIGHTCYAN_EX
-        }
 
         for line in review_comments:
             color = Fore.LIGHTBLACK_EX
@@ -91,9 +93,19 @@ def review_code(repo_path, extra_files=None):
             print(color + ' ' + line)
 
     if extra_files:
-        for file_path in extra_files:
-            with open(file_path, 'r') as file:
-                file_content = file.read()
-                print(f"Reviewing extra file {file_path}:")
-                review_comments = call_openai_for_review(file_content)
-                print(review_comments)
+        for file in extra_files:
+            file_path = os.path.join(repo_path, file)
+            with open(file_path, 'r') as f:
+                file_content = f.read()
+            print(f"Reviewing extra file {file_path}:")
+            review_comments = call_openai_for_review(file_content).splitlines()
+
+            for line in review_comments:
+                color = Fore.LIGHTBLACK_EX
+                line = line.lstrip()
+                for prefix, fore_color in color_map.items():
+                    if line.startswith(prefix):
+                        color = fore_color
+                        break
+
+                print(color + ' ' + line)
