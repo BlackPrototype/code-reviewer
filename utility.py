@@ -2,17 +2,27 @@ import os
 import subprocess
 from colorama import Fore, Style, init
 from openai import OpenAI
+from db_utils import generate_embedding, retrieve_relevant_context
 
 init(autoreset=True)
 
 def call_openai_for_review(file_content):
-    """
-    Call OpenAI API to review the given file content.
-    """
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    query_embedding = generate_embedding(file_content)
+    relevant_context = retrieve_relevant_context(query_embedding)
+
+    if not relevant_context:
+        retrieved_context = ''
+    else:
+        retrieved_context = "\n".join(
+            [f"Review ID: {r[0]}, Snippet ID: {r[1]}, Text: {r[2]}" for r in relevant_context]
+        )
 
     prompt = (
         "You are a software engineer expert.\n"
+        "Here is some additional context to help with the review:\n"                                                                                                                                    
+        f"{retrieved_context}\n"
+        "The additional context shouldn't send back with the result.\n"
         "Given an input, create a comment on the changes if needed.\n"
         "If need to provide an example give only one.\n"
         "Remember NOT include backticks ```code ``` before and after the diff.\n"
@@ -25,13 +35,12 @@ def call_openai_for_review(file_content):
             
            -Changed lines starts with '-' and means it is the original line.
            Comment#1: This is the first comment
-           Comment#2: This is the second comment if needed.
            +Changed lines starts with '+' and means it is different from the original line.
-           Comment#3: This is the third comment if needed.
+           Comment#2: This is the second comment if needed.
             
            Some other lines of code from the diff"""
         "Otherwise your code review should look similar to this:\n"
-        """some line of code that should be changed
+        """some line of code that should be changed and after that the comments
            Comment#1: This is the first comment
            Comment#2: This is the second comment if needed.
         """
@@ -48,13 +57,15 @@ def call_openai_for_review(file_content):
             {"role": "system", "content": prompt},                                                                                                                                               
         ]
     )
+
     return response.choices[0].message.content
 
 def review_code(repo_path, extra_files=None):
-    """
-    Review code in the specified repository path and any extra files.
-    """
     files_to_review = []
+    review_results = []
+    comments = []
+    suggestions = []
+
     color_map = {
         '+': Fore.GREEN,
         '-': Fore.RED,
@@ -84,6 +95,7 @@ def review_code(repo_path, extra_files=None):
         review_comments = call_openai_for_review(file_diff).splitlines()
 
         for line in review_comments:
+            line = line.lstrip()
             color = Fore.LIGHTBLACK_EX
             for prefix, fore_color in color_map.items():
                 if line.startswith(prefix) and not line.startswith(prefix * 3):
@@ -92,7 +104,24 @@ def review_code(repo_path, extra_files=None):
 
             print(color + ' ' + line)
 
+            if 'Comment#' in line:
+                comments.append(line)
+            if 'Suggestion#' in line:
+                suggestions.append(line)
+
+        review_results.append({
+            "repo_path": repo_path,
+            "file_path": file_path,
+            "code": file_diff,
+            "language": os.path.splitext(file_path)[1][1:],
+            "comments": comments,
+            "suggestions": suggestions
+        })
+
     if extra_files:
+        comments = []
+        suggestions = []
+
         for file in extra_files:
             file_path = os.path.join(repo_path, file)
             with open(file_path, 'r') as f:
@@ -109,3 +138,19 @@ def review_code(repo_path, extra_files=None):
                         break
 
                 print(color + ' ' + line)
+
+                if 'Comment#' in line:
+                    comments.append(line)
+                if 'Suggestion#' in line:
+                    suggestions.append(line)
+
+            review_results.append({
+                "repo_path": repo_path,
+                "file_path": file_path,
+                "code": file_content,
+                "language": os.path.splitext(file_path)[1][1:],
+                "comments": comments,
+                "suggestions": suggestions
+            })
+
+    return review_results
