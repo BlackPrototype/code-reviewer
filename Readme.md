@@ -4,6 +4,11 @@
 
 ## Setup
 
+### 0. Setup the PostgreSQL database for vector storing:
+Execute the following script to setup the database:
+  ```
+  ./setup_pgvector.sh
+  ```
 ### 1. Environment Variables:
 Copy the sample environment file and edit it with your API keys:
    ```
@@ -32,4 +37,9 @@ Export your `.env` variables to the system:
 4. Run the main script:
    ```
    python main.py --repo-path /path/to/your/dir [--extra-files <fn1> <fn2>]
+
+   Help:
+   --repo-path    This is the absolute path to your repository.
+   --extra-files  If you created a new file(s) that don't show up in a git diff or just an extra file from the repository.
+   --no-db        Basically the script uses the database to store the reviews. But if you don't want to store it in the db just use this option.
    ```

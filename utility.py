@@ -6,17 +6,18 @@ from db_utils import generate_embedding, retrieve_relevant_context
 
 init(autoreset=True)
 
-def call_openai_for_review(file_content):
+def call_openai_for_review(file_content, no_db):
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    query_embedding = generate_embedding(file_content)
-    relevant_context = retrieve_relevant_context(query_embedding)
+    retrieved_context = ''
 
-    if not relevant_context:
-        retrieved_context = ''
-    else:
-        retrieved_context = "\n".join(
-            [f"Review ID: {r[0]}, Snippet ID: {r[1]}, Text: {r[2]}" for r in relevant_context]
-        )
+    if not no_db:
+      query_embedding = generate_embedding(file_content)
+      relevant_context = retrieve_relevant_context(query_embedding)
+
+      if relevant_context:
+          retrieved_context = "\n".join(
+              [f"Review ID: {r[0]}, Snippet ID: {r[1]}, Text: {r[2]}" for r in relevant_context]
+          )
 
     prompt = (
         "You are a software engineer expert.\n"
@@ -60,7 +61,7 @@ def call_openai_for_review(file_content):
 
     return response.choices[0].message.content
 
-def review_code(repo_path, extra_files=None):
+def review_code(repo_path, extra_files=None, no_db=False):
     files_to_review = []
     review_results = []
     comments = []
@@ -92,7 +93,7 @@ def review_code(repo_path, extra_files=None):
     for file_path, file_diff in files_to_review:
         print(f"Reviewing changes in {file_path}:")
 
-        review_comments = call_openai_for_review(file_diff).splitlines()
+        review_comments = call_openai_for_review(file_diff, no_db).splitlines()
 
         for line in review_comments:
             line = line.lstrip()
@@ -127,7 +128,7 @@ def review_code(repo_path, extra_files=None):
             with open(file_path, 'r') as f:
                 file_content = f.read()
             print(f"Reviewing extra file {file_path}:")
-            review_comments = call_openai_for_review(file_content).splitlines()
+            review_comments = call_openai_for_review(file_content, no_db).splitlines()
 
             for line in review_comments:
                 color = Fore.LIGHTBLACK_EX
