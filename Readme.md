@@ -1,3 +1,7 @@
+## NEW:
+- This is a new version of the https://github.com/BlackPrototype/code-reviewer-1.0
+- Added PostgreSQL vector databse to store the reviewed code and comments.
+
 ## Prerequisites
 - Python 3.11 (for local setup)
 - GitHub account
